@@ -1,0 +1,21 @@
+{
+    "Version":"2012-10-17",
+    "Statement":[
+      {
+        "Effect":"Allow",
+        "Action":[
+          "iam:CreateRole",
+          "iam:AttachRolePolicy",
+          "iam:PassRole"
+        ],
+        "Resource":"arn:aws:iam::*:role/service-role/AWSBackupDefaultServiceRole"
+      },
+      {
+        "Effect":"Allow",
+        "Action":[
+          "iam:ListRoles"
+        ],
+        "Resource":"*"
+      }
+    ]
+  }
