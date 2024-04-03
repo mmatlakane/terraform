@@ -1,93 +1,118 @@
 variable "vault_name" {
   type        = string
   description = "name of vault"
-  default     = "mbali_vault_name"
 }
 variable "enabled" {
   type        = bool
-  description = "value"
-  default     = true
+  description = "value"    
 }
 
-# variable "vault_kms_key_arn" {
-#  "arn:aws:kms:eu-west-1:466021236912:key/81ad16de-2b89-405b-bf21-39d54e0ed4aa" 
-# }
 
 variable "vault_force_destroy" {
   type        = bool
   description = "value"
-  default     = false
-
 }
 
 variable "kms_key_description" {
   type    = string
-  default = "Example KMS Key"
+ 
 }
 
 
 variable "enable_key_rotation" {
   type        = bool
   description = "value"
-  default     = true
+ 
 }
 variable "tags" {
   type        = map(string)
   description = "value"
-  default = {
-    "Envirnment" = "Dev"
-  }
 }
 
 variable "kms_key_deletion_window_in_days" {
-  #type = 
-  default = 7
+  type = number
+ 
 }
 
 variable "aws_backup_plan_name" {
   type    = string
-  default = "tf_example_backup_plan"
+  
 }
 
 variable "backup_rules" {
+  description = "List of backup rules with different schedules for different resources"
+  type = map(object({
+    rule_name         = string #(Required) An display name for a backup rule.
+    schedule          = string
+    start_window      = number
+    completion_window = number
+
+
+  }))
+
+}
+
+variable "WindowsVSS" {
+  #type = bool
+
+}
+variable "WindowsVSS1" {
+  type    = string
+  default = "enabled"
+}
+
+variable "aws_iam_rule_name" {
+  type    = string
+}
+
+variable "iam_policy_name" {
+  type    = string
+
+}
+
+variable "aws_backup_selection_name" {
+  type    = string
   
 }
-variable "selection"{
 
+#To allow user to choose which backup selection to use
+variable "backup_selections" {
+  type = map(object({
+    resources     = list(string)
+    not_resources = list(string)
+
+    selection_tags = map(object({
+      type  = string
+      key   = string
+      value = string
+    }))
+
+    condition = map(any)
+
+    # condition = map(object({
+    #   string_equals = object({
+    #     key   = string
+    #     value = string
+    #   })
+    #   string_like = object({
+    #     key   = string
+    #     value = string
+    #   })
+    #   string_not_equals = object({
+    #     key   = string
+    #     value = string
+    #   })
+    #   string_not_like = object({
+    #     key   = string
+    #     value = string
+    #   })
+    # }))
+  }))
+  description = "Map of backup selections with their configurations including conditions"
 }
 
-
-
-
-
-
-
-
-
-
-# variable "backup_rules" {
-#   description = "List of backup rules with different schedules for different resources"
-#   type = list(object({
-#     name                     = string #(Required) An display name for a backup rule.
-#     schedule                 = string
-#     delete_after             = number
-#     enable_continuous_backup = bool
-#     start_window             = number
-#     completion_window        = number
-#     recovery_point_tags      = string
-#     copy_action = list(object({
-#       destination_vault_arn = string
-#       lifecycle = list(object({
-#         delete_after                              = number
-#         cold_storage_after                        = number
-#         opt_in_to_archive_for_supported_resources = bool
-#       }))
-#     }))
-    # resources = list(object({
-    #   name         = string
-    #   arn          = string
-    #   iam_role_arn = string
-    # }))
-#   }))
-
-# }
+# Users can specify this variable to select a specific backup selection.
+variable "selected_backup_selection_key" {
+  description = "Key of the selected backup selection"
+  type        = string
+}

@@ -15,113 +15,121 @@ resource "aws_kms_key" "kms_key" {
   tags                    = var.tags
 }
 
-
-resource "aws_backup_plan" "example" {
+resource "aws_backup_plan" "backup_plan" {
   name = var.aws_backup_plan_name
-
-  // Define dynamic blocks to create backup rules based on input variables
   dynamic "rule" {
-    // Iterate over each backup rule specified in the input variable var.backup_rules
     for_each = var.backup_rules
-
     content {
-      // Define attributes of each backup rule
-      rule_name                = rule.value.name
-      target_vault_name        = aws_backup_vault.backup_vault.name
-      schedule                 = rule.value.schedule
-      enable_continuous_backup = rule.value.enable_continuous_backup
-      start_window             = rule.value.start_window
-      completion_window        = rule.value.completion_window
-      recovery_point_tags      = rule.value.recovery_point_tags
-    #   copy_action {
-    #     #lifecycle = rule.value.lifecycle
-    #     lifecycle {
-    #       delete_after                              = rule.value.delete_after
-    #       cold_storage_after                        = rule.value.cold_storage_after
-    #       opt_in_to_archive_for_supported_resources = rule.value.opt_in_to_archive_for_supported_resources
-    #     }
-    #     destination_vault_arn = aws_backup_vault.backup_vault.arn #rule.value.destination_vault_arn
-    # }
+      rule_name         = lookup(rule.value, "rule_name", null)
+      target_vault_name = aws_backup_vault.backup_vault.name
+      schedule          = lookup(rule.value, "schedule", null)
+      start_window      = lookup(rule.value, "start_window", null)
+      completion_window = lookup(rule.value, "complete_window", null)
+      # lifecycle {
+      #   cold_storage_after = lookup(rule.value, "cold_storage_after", null)
+      #   delete_after       = lookup(rule.value, "delete_after", null)
+      #   #opt_in_to_archive_for_supported_resources = false
+      # }
     }
   }
-}
+  #put a condition
+  #If VSS is enable then run this block
+  dynamic "advanced_backup_setting" {
+    #for_each = var.WindowsVSS == null ? var.WindowsVSS1 : var.WindowsVSS
+    for_each = var.WindowsVSS == "enabled" ? [1] : []
+    # condition == yes ? Abigail is star : Abigail is not a star
 
-# output "destination_vault_arn" {
-#   value = aws_backup_vault.backup_vault.arn
-# }
+    #for_each = each.value.WindowsVSS ? each.value.WindowsVSS : []
+    content {
+      backup_options = {
+        WindowsVSS = var.WindowsVSS
+      }
+      resource_type = "EC2"
+    }
+  }
 
-locals {
-  destination_vault_arn = aws_backup_vault.backup_vault.arn
+
 }
 
 resource "aws_iam_role" "role" {
-  name               = "example"
+  name               = var.aws_iam_rule_name
   assume_role_policy = aws_iam_policy.policy.policy #data.aws_iam_policy_document.assume_role.json
 }
 
-resource "aws_iam_role_policy_attachment" "iam_role_policy_attachment" {
-  policy_arn = aws_iam_policy.policy.arn #"arn:aws:iam::466021236912:role/service-role/AWSBackupDefaultServiceRole"
+resource "aws_iam_role_policy_attachment" "policy_attachment" {
+  policy_arn = aws_iam_policy.policy.arn
   role       = aws_iam_role.role.name
 }
 
 resource "aws_iam_policy" "policy" {
-  name        = "test_policy"
+  name        = var.iam_policy_name
   path        = "/"
-  description = "My test policy"
-
-  # Terraform's "jsonencode" function converts a
-  # Terraform expression result to valid JSON syntax.
-  policy = file("iam-policy.json")
+  description = "AWS backup policy"
+  policy      = file("iam-policy.json")
 }
 
-# resource "aws_backup_selection" "example" {
-#     #CCreate iam role and policy
-#     #Use data resource
-#   iam_role_arn =  aws_iam_role.example.arn #"arn:aws:iam::466021236912:role/service-role/AWSBackupDefaultServiceRole"
-#   #Make var
-#   name         = "tf_example_backup_selection"
-#   plan_id      = aws_backup_plan.example.id
 
-#     #Resources is an array 
-#   resources = [
-#    # "arn:aws:ec2:eu-west-1:466021236912:instance/i-0b486b679d507f32d",
-#     #"arn:aws:s3:::mbalcftestingbucket1232",
-#     "arn:aws:dynamodb:af-south-1:466021236912:table/libery-srs_tf_lockid"
-#   ]
-# }
-
-resource "aws_backup_selection" "example" {
+resource "aws_backup_selection" "backup_selection" {
   iam_role_arn = aws_iam_role.role.arn
-  name         = "tf_example_backup_selection"
-  plan_id      = aws_backup_plan.example.id
+  name         = var.aws_backup_selection_name
+  plan_id      = aws_backup_plan.backup_plan.id
 
-dynamic "selection_tag" {
-    for_each = length(var.selection)
-  
+  for_each = var.backup_selections
+  #Allow user to pick which selection to use
+
+  resources     = each.value.resources
+  not_resources = each.value.not_resources
+
+  dynamic "selection_tag" {
+    for_each = each.value.selection_tags
     content {
-      type  = "STRINGEQUALS"
-    key   = "BackupPlanTagValue"
-    value = "True"
-    }
-    
-}
-condition {
-    string_equals {
-      key   = "aws:ResourceTag/Component"
-      value = "rds"
-    }
-    string_like {
-      key   = "aws:ResourceTag/Application"
-      value = "app*"
-    }
-    string_not_equals {
-      key   = "aws:ResourceTag/Backup"
-      value = "false"
-    }
-    string_not_like {
-      key   = "aws:ResourceTag/Environment"
-      value = "test*"
+      type  = selection_tag.value.type
+      key   = selection_tag.value.key
+      value = selection_tag.value.value
     }
   }
-  
+
+  dynamic "condition" {
+    #for_each checks if conditions are defined for the backup selection. 
+    #If conditions are defined (each.value.conditions != null), 
+    #it creates a single-element list [1], otherwise, it creates an empty list [].
+    for_each = each.value.condition != null ? [1] : []
+    content {
+      dynamic "string_equals" {
+        #checks if string_equals conditions are defined. 
+        #If they are (each.value.conditions.string_equals is not null), 
+        #it iterates over the map of string_equals conditions. 
+        #Otherwise, it uses an empty list [].
+        for_each = each.value.condition != null ? [each.value.condition.string_equals] : []
+        content {
+          key   = string_equals.value["key"]
+          value = string_equals.value["value"]
+        }
+      }
+      dynamic "string_like" {
+        for_each = each.value.condition != null ? [each.value.condition.string_like] : []
+        content {
+          key   = string_like.value["key"]
+          value = string_like.value["value"]
+        }
+      }
+      dynamic "string_not_equals" {
+        for_each = each.value.condition != null ? [each.value.condition.string_not_equals] : []
+        content {
+          key   = string_not_equals.value["key"]
+          value = string_not_equals.value["value"]
+        }
+      }
+      dynamic "string_not_like" {
+        for_each = each.value.condition != null ? [each.value.condition.string_not_like] : []
+        content {
+          key   = string_not_like.value["key"]
+          value = string_not_like.value["value"]
+        }
+      }
+    }
+  }
 }
+
+
+
